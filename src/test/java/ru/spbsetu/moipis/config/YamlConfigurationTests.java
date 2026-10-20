@@ -5,6 +5,8 @@ import org.springframework.core.io.ClassPathResource;
 import ru.spbsetu.moipis.fsm.Snapshot;
 
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -30,6 +32,34 @@ class YamlConfigurationTests {
                 initialState: review
                 states: [draft, review]
                 transitions: []
+                """));
+    }
+
+    @Test
+    void readsDocumentExampleWithApprovalReturnAndCancellation() throws Exception {
+        var config = yaml.read(Files.readString(Path.of("examples/document-approval.yaml")));
+        var graph = config.graph();
+        assertEquals("draft", config.currentState());
+        assertEquals("review", graph.nextState("draft", "submit"));
+        assertEquals("draft", graph.nextState("review", "reject"));
+        assertEquals("approved", graph.nextState("review", "approve"));
+        assertEquals("cancelled", graph.nextState("draft", "cancel"));
+        assertEquals("cancelled", graph.nextState("review", "cancel"));
+    }
+
+    @Test
+    void rejectsDuplicateStatesMissingFieldsAndUnknownProperties() {
+        assertThrows(IllegalArgumentException.class, () -> yaml.read("""
+                initialState: draft
+                states: [draft, draft]
+                transitions: []
+                """));
+        assertThrows(IllegalArgumentException.class, () -> yaml.read("initialState: draft"));
+        assertThrows(IllegalArgumentException.class, () -> yaml.read("""
+                initialState: draft
+                states: [draft]
+                transitions: []
+                typo: true
                 """));
     }
 }

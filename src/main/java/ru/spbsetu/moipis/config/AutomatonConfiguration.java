@@ -20,7 +20,7 @@ public class AutomatonConfiguration {
         var source = new ClassPathResource("automaton.yaml").getContentAsString(StandardCharsets.UTF_8);
         var automaton = new Automaton(store, yaml.read(source).graph());
         var logger = LoggerFactory.getLogger(AutomatonConfiguration.class);
-        for (var event : List.of("submit", "approve", "reject")) {
+        for (var event : List.of("submit", "approve", "reject", "cancel")) {
             automaton.registerHandler(event, message -> logger.info("Handled event {}: {}",
                     message.event(), message.payload()));
         }

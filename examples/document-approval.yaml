@@ -1,0 +1,30 @@
+# Учебный пример согласования документа для промежуточного этапа задания.
+# Обработчики submit, approve, reject и cancel регистрируются в Java.
+initialState: draft
+
+states:
+  - draft       # Подготовка документа
+  - review      # Проверка
+  - approved    # Утвержден
+  - cancelled   # Аннулирован
+
+transitions:
+  - from: draft
+    event: submit
+    to: review
+
+  - from: review
+    event: reject
+    to: draft
+
+  - from: review
+    event: approve
+    to: approved
+
+  - from: draft
+    event: cancel
+    to: cancelled
+
+  - from: review
+    event: cancel
+    to: cancelled

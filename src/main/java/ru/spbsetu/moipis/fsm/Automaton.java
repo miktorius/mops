@@ -1,8 +1,6 @@
 package ru.spbsetu.moipis.fsm;
 
-import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -11,15 +9,15 @@ import java.util.function.Consumer;
 public final class Automaton implements AutoCloseable {
     private final SnapshotStore store;
     private final Map<String, Consumer<Message>> handlers = new HashMap<>();
-    private final LinkedBlockingQueue<Pending> queue = new LinkedBlockingQueue<>();
+    private final LinkedBlockingQueue<QueuedMessage> queue = new LinkedBlockingQueue<>();
     private final Thread worker;
-    private Snapshot snapshot;
+    private Snapshot currentSnapshot;
     private volatile boolean closed;
 
     public Automaton(SnapshotStore store, Graph initialGraph) {
         this.store = store;
-        snapshot = store.load().orElseGet(() -> {
-            var initial = new Snapshot(initialGraph, initialGraph.initialState());
+        currentSnapshot = store.load().orElseGet(() -> {
+            Snapshot initial = new Snapshot(initialGraph, initialGraph.initialState());
             store.save(initial);
             return initial;
         });
@@ -27,7 +25,7 @@ public final class Automaton implements AutoCloseable {
     }
 
     public synchronized Snapshot snapshot() {
-        return snapshot;
+        return currentSnapshot;
     }
 
     public synchronized void registerHandler(String event, Consumer<Message> handler) {
@@ -40,7 +38,7 @@ public final class Automaton implements AutoCloseable {
         if (message == null) throw new IllegalArgumentException("Message is required");
         synchronized (queue) {
             if (closed) throw new IllegalStateException("Automaton is closed");
-            var pending = new Pending(message, new CompletableFuture<>());
+            QueuedMessage pending = new QueuedMessage(message, new CompletableFuture<>());
             queue.add(pending);
             return pending.result();
         }
@@ -48,65 +46,53 @@ public final class Automaton implements AutoCloseable {
 
     public synchronized void replaceGraph(Graph graph) {
         // Configuration updates never reset the running instance.
-        persist(new Snapshot(graph, snapshot.currentState()));
+        saveSnapshot(new Snapshot(graph, currentSnapshot.currentState()));
     }
 
     public synchronized void addState(String state) {
-        Graph.requireId(state);
-        var states = new HashSet<>(snapshot.graph().states());
-        if (!states.add(state)) throw new IllegalArgumentException("State already exists");
-        replaceGraph(new Graph(snapshot.graph().initialState(), states, snapshot.graph().transitions()));
+        replaceGraph(currentSnapshot.graph().withState(state));
     }
 
     public synchronized void removeState(String state) {
-        var graph = snapshot.graph();
-        if (state.equals(snapshot.currentState()) || state.equals(graph.initialState())) {
-            throw new IllegalArgumentException("Cannot remove current or initial state");
+        if (currentSnapshot.currentState().equals(state)) {
+            throw new IllegalArgumentException("Cannot remove current state");
         }
-        var states = new HashSet<>(graph.states());
-        if (!states.remove(state)) throw new IllegalArgumentException("Unknown state");
-        var transitions = graph.transitions().stream()
-                .filter(t -> !t.from().equals(state) && !t.to().equals(state)).toList();
-        replaceGraph(new Graph(graph.initialState(), states, transitions));
+        replaceGraph(currentSnapshot.graph().withoutState(state));
     }
 
     public synchronized void addTransition(Transition transition) {
-        var transitions = new ArrayList<>(snapshot.graph().transitions());
-        transitions.add(transition);
-        replaceGraph(new Graph(snapshot.graph().initialState(), snapshot.graph().states(), transitions));
+        replaceGraph(currentSnapshot.graph().withTransition(transition));
     }
 
     public synchronized void removeTransition(String from, String event) {
-        var transitions = new ArrayList<>(snapshot.graph().transitions());
-        if (!transitions.removeIf(t -> t.from().equals(from) && t.event().equals(event))) {
-            throw new IllegalArgumentException("Unknown transition");
-        }
-        replaceGraph(new Graph(snapshot.graph().initialState(), snapshot.graph().states(), transitions));
+        replaceGraph(currentSnapshot.graph().withoutTransition(from, event));
     }
 
+    // The same monitor protects graph updates and message execution.
     private synchronized Snapshot process(Message message) {
         if (closed) throw new IllegalStateException("Automaton is closed");
-        var handler = handlers.get(message.event());
+        Consumer<Message> handler = handlers.get(message.event());
         if (handler == null) throw new IllegalArgumentException("Unknown event: " + message.event());
-        var next = snapshot.graph().transitions().stream()
-                .filter(t -> t.from().equals(snapshot.currentState()) && t.event().equals(message.event()))
-                .map(Transition::to).findFirst().orElse(snapshot.currentState());
+
+        Graph graph = currentSnapshot.graph();
+        String nextState = graph.nextState(currentSnapshot.currentState(), message.event());
         handler.accept(message);
-        persist(new Snapshot(snapshot.graph(), next));
-        return snapshot;
+        saveSnapshot(new Snapshot(graph, nextState));
+        return currentSnapshot;
     }
 
-    private void persist(Snapshot updated) {
+    private void saveSnapshot(Snapshot updated) {
+        // Publish in memory only after the database has accepted the update.
         store.save(updated);
-        snapshot = updated;
+        currentSnapshot = updated;
     }
 
     private void run() {
         while (!Thread.currentThread().isInterrupted()) {
             try {
-                var pending = queue.take();
+                QueuedMessage pending = queue.take();
                 try {
-                    var result = process(pending.message());
+                    Snapshot result = process(pending.message());
                     pending.result().complete(result);
                 } catch (Exception exception) {
                     pending.result().completeExceptionally(exception);
@@ -123,11 +109,11 @@ public final class Automaton implements AutoCloseable {
             closed = true;
         }
         worker.interrupt();
-        Pending pending;
+        QueuedMessage pending;
         while ((pending = queue.poll()) != null) {
             pending.result().completeExceptionally(new IllegalStateException("Automaton is closed"));
         }
     }
 
-    private record Pending(Message message, CompletableFuture<Snapshot> result) {}
+    private record QueuedMessage(Message message, CompletableFuture<Snapshot> result) {}
 }

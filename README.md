@@ -33,8 +33,11 @@ Compose также читает `DB_PASSWORD`. Данные БД сохраня�
 
 - `fsm/Automaton` — независимый от Spring класс: очередь, обработчики, текущее
   состояние, изменение графа. Один фоновый поток последовательно обрабатывает сообщения.
-- `fsm/Graph` — состояния и переходы как данные, без привязки к предметной области.
-- `config/YamlConfiguration` — чтение/запись YAML.
+- `fsm/Graph` — состояния и переходы, поиск следующего состояния и создание
+  измененного графа, без привязки к предметной области.
+- `config/AutomatonConfig` — типизированное описание полей YAML.
+- `config/YamlConfiguration` — чтение/запись YAML через Jackson Dataformat YAML.
+  Библиотека преобразует YAML в Java-объект; правила графа проверяет наш код.
 - `persistence/JdbcSnapshotStore` — сохранение снимка в PostgreSQL.
 - `api/AutomatonController` — HTTP-интерфейс сервиса.
 
@@ -111,6 +114,27 @@ curl -X PUT http://localhost:8080/api/automaton/configuration \
   -H 'Content-Type: application/yaml' \
   --data-binary @src/main/resources/automaton.yaml
 ```
+
+Расширенный пример — [`examples/document-approval.yaml`](examples/document-approval.yaml):
+подготовка, проверка, утверждение, возврат и аннулирование документа.
+Это учебный пример для промежуточного этапа, а не шаблон одного из вариантов полного задания.
+Его можно загрузить тем же API:
+
+```bash
+curl -X PUT http://localhost:8080/api/automaton/configuration \
+  -H 'Content-Type: application/yaml' \
+  --data-binary @examples/document-approval.yaml
+
+curl -X POST http://localhost:8080/api/automaton/messages \
+  -H 'Content-Type: application/json' -d '{"event":"cancel"}'
+```
+
+Обработчик `cancel` также зарегистрирован при запуске. Поля конфигурации:
+`initialState` — начальное состояние, `states` — список строковых идентификаторов,
+`transitions` — список правил `from` / `event` / `to`.
+Поле `currentState` дополнительно используется в снимках БД; для загрузки графа через REST
+его указывать не нужно. Неизвестные поля и дубликаты отклоняются, чтобы опечатка не была
+незаметно проигнорирована.
 
 ### Новые обработчики
 
