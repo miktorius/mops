@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MOPS — автомат состояний</title>
+  <script>
+    try {
+      document.documentElement.dataset.theme = localStorage.getItem('theme') || 'dark';
+    } catch {
+      document.documentElement.dataset.theme = 'dark';
+    }
+  </script>
+  <link rel="stylesheet" href="/style.css">
+  <script type="module" src="/app.js"></script>
+</head>
+<body>
+  <main>
+    <header>
+      <div>
+        <h1>Автомат состояний</h1>
+        <p>Текущее состояние: <strong id="current-state">загрузка…</strong></p>
+      </div>
+      <div class="actions">
+        <button id="theme-toggle" type="button" aria-pressed="true">Светлая тема</button>
+        <button id="refresh" type="button">Обновить граф</button>
+      </div>
+    </header>
+    <p id="result" role="status" aria-live="polite"></p>
+
+    <section aria-label="Граф состояний" class="panel">
+      <p class="hint">Зелёным выделено текущее состояние. На стрелках указаны события.</p>
+      <p id="graph-error" role="alert" hidden></p>
+      <div id="graph" aria-label="Диаграмма переходов"></div>
+      <details>
+        <summary>Переходы списком</summary>
+        <ul id="transitions"></ul>
+      </details>
+    </section>
+
+    <section class="panel">
+      <h2>Переходы из текущего состояния</h2>
+      <p class="hint">Кнопка отправляет событие с данными из поля JSON ниже.</p>
+      <fieldset disabled>
+        <div id="available-transitions" class="actions"></div>
+      </fieldset>
+    </section>
+
+    <section class="panel">
+      <h2>Отправить событие</h2>
+      <form id="message-form">
+        <fieldset id="message-fields" disabled>
+          <label for="event">Событие</label>
+          <input id="event" name="event" list="events" placeholder="Например, submit" required autocomplete="off">
+          <datalist id="events"></datalist>
+          <p id="suggestions" class="hint"></p>
+
+          <label for="payload">Данные сообщения — JSON-объект</label>
+          <textarea id="payload" name="payload" rows="5" spellcheck="false">{}</textarea>
+          <button type="submit">Отправить</button>
+        </fieldset>
+      </form>
+      <p class="hint">Можно ввести событие вручную. Зарегистрированный обработчик без перехода выполнится без смены состояния.</p>
+    </section>
+
+    <section class="panel">
+      <h2>События</h2>
+      <form id="event-form">
+        <fieldset disabled>
+          <label for="event-id">Новое событие</label>
+          <div class="inline-form">
+            <input id="event-id" placeholder="Например, archive" required>
+            <button type="submit">Добавить событие</button>
+          </div>
+        </fieldset>
+      </form>
+      <p class="hint">Новое событие получает стандартный обработчик: запись данных в лог и выполнение настроенного перехода.</p>
+      <p class="hint">Удаление события также удаляет все переходы по нему. Сообщения с этим событием, ожидающие в очереди, будут отклонены.</p>
+      <fieldset disabled>
+        <ul id="registered-events" class="editor-list"></ul>
+      </fieldset>
+    </section>
+
+    <section class="panel">
+      <h2>Состояния</h2>
+      <form id="initial-state-form">
+        <fieldset disabled>
+          <label for="initial-state">Начальное состояние</label>
+          <div class="inline-form">
+            <select id="initial-state" required></select>
+            <button type="submit">Назначить начальным</button>
+          </div>
+        </fieldset>
+      </form>
+      <p class="hint">Назначение начального состояния не перемещает текущий автомат. Конечные состояния не принимают события; перед отметкой «конечное» удалите исходящие переходы.</p>
+      <form id="state-form">
+        <fieldset disabled>
+          <label for="state-id">Новое состояние</label>
+          <div class="inline-form">
+            <input id="state-id" placeholder="Например, archived" required>
+            <button type="submit">Добавить</button>
+          </div>
+        </fieldset>
+      </form>
+      <p class="hint">Текущее и начальное состояния удалить нельзя. При удалении другого состояния удаляются связанные переходы.</p>
+      <fieldset disabled>
+        <ul id="state-list" class="editor-list"></ul>
+      </fieldset>
+    </section>
+
+    <section class="panel">
+      <h2>Переходы</h2>
+      <form id="transition-form">
+        <fieldset disabled>
+          <div class="transition-fields">
+            <div>
+              <label for="transition-from">Из состояния</label>
+              <select id="transition-from" required></select>
+            </div>
+            <div>
+              <label for="transition-event">По событию</label>
+              <select id="transition-event" required></select>
+            </div>
+            <div>
+              <label for="transition-to">В состояние</label>
+              <select id="transition-to" required></select>
+            </div>
+          </div>
+          <button type="submit">Добавить переход</button>
+        </fieldset>
+      </form>
+      <p class="hint">Выберите зарегистрированное событие. Один переход на пару «исходное состояние + событие». Для замены перехода удалите его и добавьте новый.</p>
+      <fieldset disabled>
+        <ul id="transition-list" class="editor-list"></ul>
+      </fieldset>
+    </section>
+  </main>
+</body>
+</html>

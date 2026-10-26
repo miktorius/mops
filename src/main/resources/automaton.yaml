@@ -1,4 +1,5 @@
 initialState: draft
+events: [submit, approve, reject, cancel]
 states: [draft, review, approved]
 transitions:
   - {from: draft, event: submit, to: review}

@@ -21,6 +21,9 @@ public class AutomatonConfiguration {
         var automaton = new Automaton(store, yaml.read(source).graph());
         var logger = LoggerFactory.getLogger(AutomatonConfiguration.class);
         for (var event : List.of("submit", "approve", "reject", "cancel")) {
+            if (!automaton.snapshot().graph().events().contains(event)) {
+                continue;
+            }
             automaton.registerHandler(event, message -> logger.info("Handled event {}: {}",
                     message.event(), message.payload()));
         }

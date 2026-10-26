@@ -13,7 +13,9 @@ public record AutomatonConfig(
         String initialState,
         List<String> states,
         List<Transition> transitions,
-        String currentState
+        String currentState,
+        Set<String> events,
+        Set<String> finalStates
 ) {
     public Snapshot toSnapshot() {
         if (states == null) {
@@ -23,7 +25,7 @@ public record AutomatonConfig(
         if (uniqueStates.size() != states.size()) {
             throw new IllegalArgumentException("Duplicate state");
         }
-        Graph graph = new Graph(initialState, uniqueStates, transitions);
+        Graph graph = new Graph(initialState, uniqueStates, transitions, events, finalStates);
         String state = currentState == null ? initialState : currentState;
         return new Snapshot(graph, state);
     }
@@ -31,6 +33,6 @@ public record AutomatonConfig(
     public static AutomatonConfig fromSnapshot(Snapshot snapshot) {
         Graph graph = snapshot.graph();
         return new AutomatonConfig(graph.initialState(), graph.states().stream().sorted().toList(),
-                graph.transitions(), snapshot.currentState());
+                graph.transitions(), snapshot.currentState(), graph.events(), graph.finalStates());
     }
 }

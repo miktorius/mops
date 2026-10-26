@@ -37,6 +37,30 @@ public class AutomatonController {
         return automaton.snapshot();
     }
 
+    @PostMapping("/events")
+    public Snapshot addEvent(@RequestBody StateRequest request) {
+        automaton.addEvent(request.id());
+        return automaton.snapshot();
+    }
+
+    @PutMapping("/initial-state")
+    public Snapshot setInitialState(@RequestBody StateRequest request) {
+        automaton.setInitialState(request.id());
+        return automaton.snapshot();
+    }
+
+    @DeleteMapping("/events/{id}")
+    public Snapshot removeEvent(@PathVariable String id) {
+        automaton.removeEvent(id);
+        return automaton.snapshot();
+    }
+
+    @PutMapping("/final-state")
+    public Snapshot setFinalState(@RequestBody FinalStateRequest request) {
+        automaton.setFinalState(request.id(), request.terminal());
+        return automaton.snapshot();
+    }
+
     @DeleteMapping("/states/{id}")
     public Snapshot removeState(@PathVariable String id) {
         automaton.removeState(id);
@@ -61,4 +85,5 @@ public class AutomatonController {
     }
 
     public record StateRequest(String id) {}
+    public record FinalStateRequest(String id, boolean terminal) {}
 }

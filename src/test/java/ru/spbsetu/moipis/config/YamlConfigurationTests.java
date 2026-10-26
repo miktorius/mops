@@ -24,6 +24,21 @@ class YamlConfigurationTests {
     }
 
     @Test
+    void roundTripsRegisteredEventsAndFinalStates() {
+        var snapshot = yaml.read("""
+                initialState: draft
+                states: [draft, approved]
+                events: [approve, archive]
+                finalStates: [approved]
+                transitions:
+                  - {from: draft, event: approve, to: approved}
+                """);
+        assertTrue(snapshot.graph().events().contains("archive"));
+        assertTrue(snapshot.graph().finalStates().contains("approved"));
+        assertEquals(snapshot, yaml.read(yaml.write(snapshot)));
+    }
+
+    @Test
     void rejectsMalformedYamlAndDuplicateKeys() {
         assertThrows(IllegalArgumentException.class, () -> yaml.read("["));
         assertThrows(IllegalArgumentException.class, () -> yaml.read(""));

@@ -75,12 +75,12 @@ class AutomatonTests {
     void addsAndRemovesStatesTransitionsAndHandlersAtRuntime() {
         try (var machine = new Automaton(new MemoryStore(), graph)) {
             machine.addState("archived");
-            machine.addTransition(new Transition("draft", "archive", "archived"));
             machine.registerHandler("archive", message -> {});
+            machine.addTransition(new Transition("draft", "archive", "archived"));
             assertEquals("archived", send(machine, "archive").currentState());
             assertThrows(IllegalArgumentException.class, () -> machine.removeState("archived"));
-            machine.addTransition(new Transition("archived", "restore", "draft"));
             machine.registerHandler("restore", message -> {});
+            machine.addTransition(new Transition("archived", "restore", "draft"));
             send(machine, "restore");
             machine.removeTransition("archived", "restore");
             machine.removeState("archived");
@@ -131,6 +131,80 @@ class AutomatonTests {
             assertEquals("draft", machine.snapshot().currentState());
             assertEquals(graph, machine.snapshot().graph());
             assertEquals(machine.snapshot(), store.saved);
+        }
+    }
+
+    @Test
+    void newEventsAndStateFlagsSurviveRestart() {
+        var store = new MemoryStore();
+        try (var machine = new Automaton(store, graph)) {
+            machine.addEvent("archive");
+            machine.addTransition(new Transition("draft", "archive", "approved"));
+            machine.setInitialState("review");
+            machine.setFinalState("approved", true);
+            assertEquals("draft", machine.snapshot().currentState());
+        }
+        try (var machine = new Automaton(store, graph)) {
+            assertEquals("review", machine.snapshot().graph().initialState());
+            assertEquals("approved", send(machine, "archive").currentState());
+            var before = machine.snapshot();
+            assertThrows(CompletionException.class, () -> send(machine, "submit"));
+            assertEquals(before, machine.snapshot());
+            machine.setFinalState("approved", false);
+            machine.addEvent("restore");
+            machine.addTransition(new Transition("approved", "restore", "draft"));
+            assertEquals("draft", send(machine, "restore").currentState());
+        }
+    }
+
+    @Test
+    void rejectsInvalidEventAndStateFlagChanges() {
+        var store = new MemoryStore();
+        try (var machine = new Automaton(store, graph)) {
+            var before = machine.snapshot();
+            assertThrows(IllegalArgumentException.class, () -> machine.addEvent("submit"));
+            assertThrows(IllegalArgumentException.class, () -> machine.addEvent(" "));
+            assertThrows(IllegalArgumentException.class, () -> machine.setInitialState("missing"));
+            assertThrows(IllegalArgumentException.class, () -> machine.setFinalState("missing", true));
+            assertThrows(IllegalArgumentException.class, () -> machine.setFinalState("draft", true));
+            assertThrows(IllegalArgumentException.class,
+                    () -> machine.addTransition(new Transition("draft", "unknown", "approved")));
+            assertEquals(before, machine.snapshot());
+            assertEquals(before, store.saved);
+        }
+    }
+
+    @Test
+    void deletingEventRemovesTransitionsAndHandlerAndSurvivesRestart() {
+        var store = new MemoryStore();
+        try (var machine = new Automaton(store, graph)) {
+            machine.registerHandler("submit", message -> { throw new IllegalStateException("Old handler"); });
+            machine.removeEvent("submit");
+            assertFalse(machine.snapshot().graph().events().contains("submit"));
+            assertTrue(machine.snapshot().graph().transitions().stream()
+                    .noneMatch(transition -> transition.event().equals("submit")));
+            assertThrows(CompletionException.class, () -> send(machine, "submit"));
+            assertThrows(IllegalArgumentException.class, () -> machine.removeEvent("missing"));
+        }
+        try (var machine = new Automaton(store, graph)) {
+            assertFalse(machine.snapshot().graph().events().contains("submit"));
+            machine.addEvent("submit");
+            assertEquals("draft", send(machine, "submit").currentState());
+        }
+    }
+
+    @Test
+    void storageFailureKeepsEventAndItsHandler() {
+        var store = new MemoryStore();
+        try (var machine = new Automaton(store, graph)) {
+            var handled = new java.util.concurrent.atomic.AtomicBoolean();
+            machine.registerHandler("submit", message -> handled.set(true));
+            store.fail = true;
+            assertThrows(IllegalStateException.class, () -> machine.removeEvent("submit"));
+            assertTrue(machine.snapshot().graph().events().contains("submit"));
+            store.fail = false;
+            assertEquals("review", send(machine, "submit").currentState());
+            assertTrue(handled.get());
         }
     }
 

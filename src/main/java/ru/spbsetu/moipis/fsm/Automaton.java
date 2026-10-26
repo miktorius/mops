@@ -31,7 +31,27 @@ public final class Automaton implements AutoCloseable {
     public synchronized void registerHandler(String event, Consumer<Message> handler) {
         Graph.requireId(event);
         if (handler == null) throw new IllegalArgumentException("Handler is required");
+        if (!currentSnapshot.graph().events().contains(event)) {
+            addEvent(event);
+        }
         handlers.put(event, handler);
+    }
+
+    public synchronized void addEvent(String event) {
+        replaceGraph(currentSnapshot.graph().withEvent(event));
+    }
+
+    public synchronized void removeEvent(String event) {
+        replaceGraph(currentSnapshot.graph().withoutEvent(event));
+        handlers.remove(event);
+    }
+
+    public synchronized void setInitialState(String state) {
+        replaceGraph(currentSnapshot.graph().withInitialState(state));
+    }
+
+    public synchronized void setFinalState(String state, boolean terminal) {
+        replaceGraph(currentSnapshot.graph().withFinalState(state, terminal));
     }
 
     public CompletableFuture<Snapshot> submit(Message message) {
@@ -71,14 +91,24 @@ public final class Automaton implements AutoCloseable {
     // The same monitor protects graph updates and message execution.
     private synchronized Snapshot process(Message message) {
         if (closed) throw new IllegalStateException("Automaton is closed");
-        Consumer<Message> handler = handlers.get(message.event());
-        if (handler == null) throw new IllegalArgumentException("Unknown event: " + message.event());
-
         Graph graph = currentSnapshot.graph();
+        if (graph.finalStates().contains(currentSnapshot.currentState())) {
+            throw new IllegalArgumentException("No events are allowed in a final state");
+        }
+        if (!graph.events().contains(message.event())) {
+            throw new IllegalArgumentException("Unknown event: " + message.event());
+        }
+        Consumer<Message> handler = handlers.getOrDefault(message.event(), this::logEvent);
         String nextState = graph.nextState(currentSnapshot.currentState(), message.event());
         handler.accept(message);
         saveSnapshot(new Snapshot(graph, nextState));
         return currentSnapshot;
+    }
+
+    // Events created through REST use this built-in handler, including after restart.
+    private void logEvent(Message message) {
+        System.getLogger(Automaton.class.getName()).log(System.Logger.Level.INFO,
+                "Handled event {0}: {1}", message.event(), message.payload());
     }
 
     private void saveSnapshot(Snapshot updated) {
