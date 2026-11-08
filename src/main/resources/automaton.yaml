@@ -1,7 +1,0 @@
-initialState: draft
-events: [submit, approve, reject, cancel]
-states: [draft, review, approved]
-transitions:
-  - {from: draft, event: submit, to: review}
-  - {from: review, event: approve, to: approved}
-  - {from: review, event: reject, to: draft}
