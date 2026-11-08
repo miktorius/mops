@@ -38,3 +38,6 @@ out/
 
 # Runtime audit logs
 /logs/
+
+# macOS directory metadata
+.DS_Store

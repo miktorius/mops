@@ -1,0 +1,123 @@
+# Демонстрационная модель: согласование заявки на закупку оборудования.
+classes:
+  - id: document
+    title: Документ
+    parameters:
+      - { id: title, title: Название, type: string }
+      - { id: department, title: Подразделение, type: string, default: Разработка }
+      - { id: amount, title: Сумма в рублях, type: decimal, min: 0, max: 1000000 }
+  - id: purchase_request
+    title: Заявка на оборудование
+    parent: document
+    parameters:
+      # Полное переопределение диапазона унаследованного параметра.
+      - { id: amount, title: Сумма в рублях, type: decimal, min: 1000, max: 200000 }
+      - { id: equipment, title: Оборудование, type: equipment, quantity_min: 1, quantity_max: 5 }
+      - { id: review_mode, title: Порядок согласования, type: string, default: обычный }
+  - id: equipment
+    title: Единица оборудования
+    parameters:
+      - { id: title, title: Наименование, type: string }
+      - { id: price, title: Цена в рублях, type: decimal, min: 1000, max: 200000 }
+  - id: laptop
+    title: Ноутбук
+    parent: equipment
+    parameters:
+      - { id: price, title: Цена в рублях, type: decimal, min: 30000, max: 150000 }
+
+objects:
+  - id: monitor
+    class: equipment
+    values: { title: Монитор, price: 30000 }
+  - id: printer
+    class: equipment
+    values: { title: Принтер, price: 15000 }
+  - id: laptop
+    class: laptop
+    values: { title: Рабочий ноутбук, price: 150000 }
+  - id: request-office
+    class: purchase_request
+    values:
+      title: Монитор и принтер для офиса
+      amount: 45000
+      equipment: [ monitor, printer ]
+  - id: request-laptop
+    class: purchase_request
+    values:
+      title: Рабочее место разработчика
+      amount: 180000
+      equipment: [ laptop, monitor ]
+  - id: request-mandatory
+    class: purchase_request
+    values:
+      title: Принтер с обязательной проверкой бюджета
+      amount: 15000
+      equipment: [ printer ]
+      review_mode: обязательный
+  - id: request-empty
+    class: purchase_request
+    values:
+      title: Заявка без оборудования
+      amount: 45000
+  - id: request-over-limit
+    class: purchase_request
+    values:
+      title: Заявка сверх лимита
+      amount: 250000
+      equipment: [ laptop ]
+
+roles:
+  - { id: requester, title: Инициатор }
+  - { id: manager, title: Руководитель }
+  - { id: finance, title: Финансист }
+  - { id: purchaser, title: Специалист по закупкам }
+users:
+  - { id: demo, name: Демонстратор — все роли, roles: [ requester, manager, finance, purchaser ] }
+  - { id: anna, name: Анна · инициатор, roles: [ requester ] }
+  - { id: mikhail, name: Михаил · руководитель, roles: [ manager ] }
+  - { id: olga, name: Ольга · финансист, roles: [ finance ] }
+  - { id: elena, name: Елена · закупки, roles: [ purchaser ] }
+
+processes:
+  - process: equipment_purchase
+    title: Закупка оборудования
+    class: purchase_request
+    create_roles: [ requester ]
+    actions:
+      - { id: submit, title: Отправить на согласование }
+      - { id: approve, title: Согласовать }
+      - { id: return, title: Вернуть на доработку }
+      - { id: cancel, title: Отменить заявку }
+      - { id: receive, title: Подтвердить получение }
+    predicates:
+      - { id: has_title, parameter: title, operator: filled }
+      - { id: amount_valid, parameter: amount, operator: in_range }
+      - { id: equipment_count_valid, parameter: equipment, operator: in_range }
+      - { id: equipment_prices_valid, parameter: equipment.price, operator: in_range, aggregate: all }
+      - { id: small_purchase, parameter: amount, operator: '<=', value: 100000 }
+      - { id: mandatory_review, parameter: review_mode, operator: '=', value: обязательный }
+    states:
+      - { id: draft, title: Подготовка заявки, initial: true, roles: [ requester ] }
+      - { id: review, title: У руководителя, roles: [ manager ] }
+      - { id: finance_review, title: Проверка бюджета, roles: [ finance ] }
+      - { id: purchasing, title: Закупка, roles: [ purchaser ] }
+      - { id: completed, title: Оборудование получено, final: true }
+      - { id: cancelled, title: Заявка отменена, final: true }
+    transitions:
+      - from: draft
+        action: submit
+        to: review
+        condition: [ [ has_title, amount_valid, equipment_count_valid, equipment_prices_valid ] ]
+      - { from: draft, action: cancel, to: cancelled }
+      - { from: review, action: return, to: draft }
+      - from: review
+        action: approve
+        to: purchasing
+        condition: [ [ small_purchase, not mandatory_review ] ]
+      - from: review
+        action: approve
+        to: finance_review
+        condition: [ [ not small_purchase ], [ mandatory_review ] ]
+      - { from: finance_review, action: approve, to: purchasing }
+      - { from: finance_review, action: return, to: draft }
+      - { from: purchasing, action: receive, to: completed }

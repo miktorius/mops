@@ -1,0 +1,199 @@
+# Вариант 1: включение нового комплектующего в справочник.
+# Обоснование модели и правил: docs/variant-1-domain.md.
+classes:
+  - id: item
+    title: Изделие
+    parameters:
+      - {id: title, title: Наименование, type: string}
+      - {id: designation, title: Обозначение, type: string}
+      - {id: mass, title: Масса в кг, type: decimal, min: 0.001, max: 10000}
+  - id: component
+    title: Комплектующее изделие
+    parent: item
+    parameters:
+      # Тип сохранён, описание параметра родителя заменено полностью.
+      - {id: mass, title: Масса в кг, type: decimal, min: 0.001, max: 50}
+      - {id: specification, title: Техническая спецификация, type: string}
+      - {id: production, title: Способ изготовления, type: string, default: серийное}
+      - {id: supplier_requirements, title: Требования к изготовлению, type: string}
+      - {id: suppliers, title: Возможные поставщики, type: supplier, quantity_min: 1, quantity_max: 5}
+  - id: supplier
+    title: Поставщик
+    parameters:
+      - {id: title, title: Наименование, type: string}
+      - {id: qualification, title: Квалификация, type: string, default: подтверждена}
+      - {id: delivery_days, title: Срок поставки в днях, type: integer, min: 1, max: 90, default: 30}
+
+objects:
+  - id: supplier-standard
+    class: supplier
+    values:
+      title: ООО «Промкомплект»
+      delivery_days: 14
+  - id: supplier-reserve
+    class: supplier
+    values:
+      title: ООО «Техснаб»
+      delivery_days: 30
+  - id: supplier-custom
+    class: supplier
+    values:
+      title: ООО «Точная механика»
+      delivery_days: 60
+  - id: supplier-unqualified
+    class: supplier
+    values:
+      title: ООО «Новый поставщик»
+      qualification: не подтверждена
+      delivery_days: 20
+  - id: supplier-slow
+    class: supplier
+    values:
+      title: ООО «Долгая поставка»
+      delivery_days: 120
+
+  - id: component-bearing
+    class: component
+    values:
+      title: Подшипник 6204
+      designation: ПК.6204
+      mass: 0.106
+      specification: 'Спецификация ПК.6204; внутренний диаметр 20 мм; наружный диаметр 47 мм'
+      suppliers: [supplier-standard, supplier-reserve]
+  - id: component-custom
+    class: component
+    values:
+      title: Втулка специальная
+      designation: ВТ.012.001
+      mass: 0.35
+      specification: 'Сталь 40Х; диаметр 30 мм; длина 45 мм'
+      production: под заказ
+      supplier_requirements: 'Изготовление по чертежу ВТ.012.001; паспорт качества; партия 100 шт.'
+      suppliers: [supplier-custom]
+  - id: component-overweight
+    class: component
+    values:
+      title: Комплектующее с превышением массы
+      designation: ПК.999
+      mass: 75
+      specification: 'Учебный пример: масса допустима для изделия, но не для комплектующего'
+      suppliers: [supplier-standard]
+  - id: component-no-suppliers
+    class: component
+    values:
+      title: Комплектующее без поставщиков
+      designation: ПК.010
+      mass: 1.2
+      specification: 'Стандартное изделие по техническому описанию ПК.010'
+  - id: component-unqualified
+    class: component
+    values:
+      title: Комплектующее с непроверенным поставщиком
+      designation: ПК.011
+      mass: 0.8
+      specification: 'Стандартное изделие по техническому описанию ПК.011'
+      suppliers: [supplier-standard, supplier-unqualified]
+  - id: component-slow-delivery
+    class: component
+    values:
+      title: Комплектующее с долгой поставкой
+      designation: ПК.012
+      mass: 0.9
+      specification: 'Стандартное изделие по техническому описанию ПК.012'
+      suppliers: [supplier-slow]
+  - id: component-no-requirements
+    class: component
+    values:
+      title: Заказное комплектующее без требований
+      designation: ПК.013
+      mass: 0.4
+      specification: 'Нестандартное изделие по чертежу ПК.013'
+      production: под заказ
+      suppliers: [supplier-custom]
+
+roles:
+  - {id: engineer, title: Инженер-инициатор}
+  - {id: kb, title: Согласующий КБ}
+  - {id: technology, title: Согласующий ТО}
+  - {id: procurement, title: Специалист по снабжению}
+  - {id: approver, title: Ответственный за допуск}
+users:
+  - {id: demo, name: Демонстратор — все роли, roles: [engineer, kb, technology, procurement, approver]}
+  - {id: anna, name: Анна · инженер, roles: [engineer]}
+  - {id: boris, name: Борис · КБ, roles: [kb]}
+  - {id: tatiana, name: Татьяна · ТО, roles: [technology]}
+  - {id: oleg, name: Олег · снабжение, roles: [procurement]}
+  - {id: irina, name: Ирина · допуск, roles: [approver]}
+
+processes:
+  - process: component_introduction
+    title: Включение нового комплектующего в справочник
+    class: component
+    create_roles: [engineer]
+    actions:
+      - {id: complete, title: Завершено}
+      - {id: kb_approve, title: Согласовано в КБ}
+      - {id: kb_comments, title: Замечания КБ}
+      - {id: technology_approve, title: Согласовано в ТО}
+      - {id: technology_comments, title: Замечания ТО}
+      - {id: suppliers_found, title: Поставщики найдены}
+      - {id: not_produced, title: Продукция не производится}
+      - {id: supplier_refusal, title: Отказ поставщика}
+      - {id: supplier_agreement, title: Согласовано с поставщиком}
+      - {id: allow, title: Разрешение на использование}
+      - {id: forbid, title: Запрет на использование}
+      - {id: confirm_allowance, title: Подтверждение разрешения}
+      - {id: confirm_prohibition, title: Подтверждение запрещения}
+    predicates:
+      - {id: title_filled, parameter: title, operator: filled}
+      - {id: designation_filled, parameter: designation, operator: filled}
+      - {id: mass_valid, parameter: mass, operator: in_range}
+      - {id: specification_filled, parameter: specification, operator: filled}
+      - {id: serial_production, parameter: production, operator: '=', value: серийное}
+      - {id: custom_production, parameter: production, operator: '=', value: под заказ}
+      - {id: requirements_filled, parameter: supplier_requirements, operator: filled}
+      - {id: supplier_count_valid, parameter: suppliers, operator: in_range}
+      - {id: suppliers_qualified, parameter: suppliers.qualification, operator: '=', value: подтверждена, aggregate: all}
+      - {id: delivery_terms_valid, parameter: suppliers.delivery_days, operator: in_range, aggregate: all}
+    states:
+      - {id: declared, title: Объявление нового комплектующего, initial: true, roles: [engineer]}
+      - {id: editing, title: Редактирование параметров, roles: [engineer]}
+      - {id: review_kb, title: Согласование в КБ, roles: [kb]}
+      - {id: review_to, title: Согласование в ТО, roles: [technology]}
+      - {id: suppliers, title: Определение возможных поставщиков, roles: [procurement]}
+      - {id: requirements, title: Выставление требований поставщику, roles: [procurement]}
+      - {id: permission, title: Разрешение на использование, roles: [approver]}
+      - {id: forbidden, title: Запрещено использовать, roles: [approver]}
+      - {id: allowed, title: Разрешено использовать, roles: [approver]}
+    transitions:
+      - {from: declared, action: complete, to: editing}
+      - from: editing
+        action: complete
+        to: review_kb
+        condition: [[title_filled, designation_filled, mass_valid, specification_filled]]
+      - {from: review_kb, action: kb_comments, to: editing}
+      - {from: review_kb, action: kb_approve, to: review_to}
+      - {from: review_to, action: technology_comments, to: editing}
+      - {from: review_to, action: technology_approve, to: suppliers}
+      - from: suppliers
+        action: suppliers_found
+        to: permission
+        condition: [[serial_production, supplier_count_valid, suppliers_qualified, delivery_terms_valid]]
+      - from: suppliers
+        action: not_produced
+        to: requirements
+        condition: [[custom_production]]
+      - {from: requirements, action: supplier_refusal, to: requirements}
+      - from: requirements
+        action: supplier_agreement
+        to: permission
+        condition: [[requirements_filled, supplier_count_valid, suppliers_qualified, delivery_terms_valid]]
+      - from: permission
+        action: allow
+        to: allowed
+        condition:
+          - [serial_production, supplier_count_valid, suppliers_qualified, delivery_terms_valid]
+          - [custom_production, requirements_filled, supplier_count_valid, suppliers_qualified, delivery_terms_valid]
+      - {from: permission, action: forbid, to: forbidden}
+      - {from: allowed, action: confirm_allowance, to: permission}
+      - {from: forbidden, action: confirm_prohibition, to: permission}

@@ -1,0 +1,63 @@
+# Synthetic fixtures for engine tests, not a domain design.
+classes:
+  - id: base
+    parameters:
+      - {id: name, type: string, default: ''}
+      - {id: count, type: integer, min: 1, max: 10, default: 3}
+  - id: child
+    parent: base
+    parameters:
+      - {id: count, type: integer, min: 2, max: 5, default: 2}
+      - {id: parts, type: part, quantity_min: 1, quantity_max: 2}
+      - {id: mode, type: string, default: normal}
+      - {id: unset, type: decimal}
+  - id: grandchild
+    parent: child
+  - id: part
+    parameters:
+      - {id: size, type: decimal, min: 1, max: 4}
+  - id: special_part
+    parent: part
+    parameters:
+      - {id: size, type: decimal, min: 1, max: 2}
+objects:
+  - {id: p1, class: part, values: {size: 3}}
+  - {id: p2, class: special_part, values: {size: 3}}
+  - {id: good, class: child, values: {parts: [p1]}}
+  - {id: big, class: child, values: {count: 8, parts: [p1]}}
+  - {id: bad_part, class: child, values: {parts: [p2]}}
+  - {id: missing, class: child, values: {count: null}}
+  - {id: empty, class: child}
+  - {id: inherited, class: grandchild}
+  - {id: alternate, class: child, values: {count: 4, mode: fast, parts: [p1]}}
+  - {id: ordinary, class: child, values: {count: 4, parts: [p1]}}
+roles:
+  - {id: writer}
+  - {id: reviewer}
+users:
+  - {id: author, roles: [writer]}
+  - {id: reviewer, roles: [reviewer]}
+  - {id: both, roles: [writer, reviewer]}
+processes:
+  - process: test_flow
+    class: child
+    create_roles: [writer]
+    actions: [{id: send}, {id: back}, {id: accept}]
+    predicates:
+      - {id: named, parameter: name, operator: filled}
+      - {id: valid, parameter: count, operator: in_range}
+      - {id: complete, parameter: parts, operator: in_range}
+      - {id: valid_parts, parameter: parts.size, operator: in_range, aggregate: all}
+      - {id: small, parameter: count, operator: '<=', value: 2}
+      - {id: fast, parameter: mode, operator: '=', value: fast}
+    states:
+      - {id: initial, initial: true, roles: [writer]}
+      - {id: review, roles: [reviewer]}
+      - {id: extra, roles: [reviewer]}
+      - {id: done, final: true}
+    transitions:
+      - {from: initial, action: send, to: review, condition: [[named, valid, complete, valid_parts]]}
+      - {from: review, action: back, to: initial}
+      - {from: review, action: accept, to: done, condition: [[small], [fast]]}
+      - {from: review, action: accept, to: extra, condition: [[not small, not fast]]}
+      - {from: extra, action: accept, to: done}
